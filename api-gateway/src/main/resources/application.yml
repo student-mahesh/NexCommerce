@@ -1,0 +1,79 @@
+server:
+  port: ${GATEWAY_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:5173"
+              - "http://localhost:3000"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+            maxAge: 3600
+      routes:
+        # Route to Auth Service
+        - id: auth-service
+          uri: http://${AUTH_SERVICE_HOST:localhost}:${AUTH_SERVICE_PORT:8086}
+          predicates:
+            - Path=/api/auth/**
+
+        # Route to Product Service
+        - id: product-service
+          uri: http://${PRODUCT_SERVICE_HOST:localhost}:${PRODUCT_SERVICE_PORT:8081}
+          predicates:
+            - Path=/api/products/**, /api/categories/**
+
+        # Route to Order Service
+        - id: order-service
+          uri: http://${ORDER_SERVICE_HOST:localhost}:${ORDER_SERVICE_PORT:8082}
+          predicates:
+            - Path=/api/orders/**
+
+        # Route to Inventory Service
+        - id: inventory-service
+          uri: http://${INVENTORY_SERVICE_HOST:localhost}:${INVENTORY_SERVICE_PORT:8083}
+          predicates:
+            - Path=/api/inventory/**
+
+        # Route to Payment Service
+        - id: payment-service
+          uri: http://${PAYMENT_SERVICE_HOST:localhost}:${PAYMENT_SERVICE_PORT:8084}
+          predicates:
+            - Path=/api/payments/**
+
+        # Route to Notification Service
+        - id: notification-service
+          uri: http://${NOTIFICATION_SERVICE_HOST:localhost}:${NOTIFICATION_SERVICE_PORT:8085}
+          predicates:
+            - Path=/api/notifications/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    root: INFO
+    com.ecommerce: INFO
+    org.springframework.cloud.gateway: INFO
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}

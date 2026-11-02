@@ -1,0 +1,95 @@
+services:
+  # ============================================================================
+  # MySQL Database (Port 3309 on Host -> 3306 in Container)
+  # Pre-creates the 6 microservice databases via initialization script.
+  # ============================================================================
+  ecom-mysql:
+    image: mysql:8.4
+    container_name: ecom-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ecommerce_master}
+      MYSQL_USER: ${MYSQL_USER:-ecom_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ecom_secure_pass}
+    ports:
+      - "${MYSQL_HOST_PORT:-3309}:3306"
+    volumes:
+      - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
+      - ecom_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD:-rootpassword} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - ecom-network
+
+  # ============================================================================
+  # Redis Cache (Port 6380 on Host -> 6379 in Container)
+  # High-speed cache-aside for product catalog.
+  # ============================================================================
+  ecom-redis:
+    image: redis:8.0
+    container_name: ecom-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - ecom_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ecom-network
+
+  # ============================================================================
+  # Apache Kafka Broker (KRaft Mode, No Zookeeper required)
+  # Port 9094 on Host -> 9094 in Container, Internal broker on 29092
+  # ============================================================================
+  ecom-kafka:
+    image: apache/kafka:4.1.1
+    container_name: ecom-kafka
+    restart: unless-stopped
+    ports:
+      - "${KAFKA_HOST_PORT:-9094}:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://ecom-kafka:29092,EXTERNAL://localhost:${KAFKA_HOST_PORT:-9094}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@ecom-kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes:
+      - ecom_kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list || exit 1"]
+      interval: 15s
+      timeout: 15s
+      retries: 5
+      start_period: 20s
+    networks:
+      - ecom-network
+
+volumes:
+  ecom_mysql_data:
+  ecom_redis_data:
+  ecom_kafka_data:
+
+networks:
+  ecom-network:
+    name: ecom-network
+    driver: bridge
